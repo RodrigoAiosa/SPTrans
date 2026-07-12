@@ -69,6 +69,11 @@ except Exception as e:
     st.error(f"Falha inesperada ao autenticar na API: {e}")
     st.stop()
 
+st.sidebar.success("Autenticado ✅")
+st.sidebar.caption(f"Última renovação de sessão: {datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"🔧 sptrans_client versão: `{CLIENT_VERSION}`")
+
+
 def call_api(func, *args, **kwargs):
     """Executa uma chamada à API tratando erros de forma visível ao usuário,
     em vez de deixar o Streamlit redigir a exceção."""
