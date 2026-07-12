@@ -1,0 +1,473 @@
+/* ==========================================================================
+   OLHO VIVO DASHBOARD — DESIGN SYSTEM
+   ==========================================================================
+   Conceito: linguagem visual de transporte público — linhas de rota, paradas,
+   sinalização e o pulso de GPS ao vivo. Nada de bege+serifa nem preto+neon:
+   fundo "concreto" claro, tinta escura, azul-rota como cor de ação e
+   âmbar-parada reservado só para o sinal de tempo real.
+
+   Paleta:
+     --color-bg        #F1F2F4  concreto (fundo)
+     --color-surface    #FFFFFF  superfície de cartões
+     --color-ink        #12182B  tinta (texto primário)
+     --color-ink-soft   #515B6E  tinta suave (texto secundário)
+     --color-route      #1E5EFF  azul-rota (ação primária, links)
+     --color-route-dark #133FB0  azul-rota escuro (hover)
+     --color-stop       #FF8A34  âmbar-parada (sinal ao vivo, destaque raro)
+     --color-line       #D8DCE3  linha/hairline (bordas, divisores)
+
+   Tipografia:
+     Display: 'Space Grotesk'  — títulos, números grandes, headline
+     Corpo:   'Inter'          — parágrafos, navegação, botões
+     Mono:    'IBM Plex Mono'  — códigos de linha, timestamps, dados
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Cores */
+  --color-bg: #F1F2F4;
+  --color-surface: #FFFFFF;
+  --color-ink: #12182B;
+  --color-ink-soft: #515B6E;
+  --color-route: #1E5EFF;
+  --color-route-dark: #133FB0;
+  --color-stop: #FF8A34;
+  --color-line: #D8DCE3;
+
+  /* Tipografia */
+  --font-display: 'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+
+  /* Escala tipográfica */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --text-3xl: 3.75rem;
+
+  /* Espaçamento */
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2.5rem;
+  --space-5: 4rem;
+  --space-6: 6rem;
+
+  /* Layout */
+  --max-width: 1160px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-full: 999px;
+
+  /* Sombra sutil (uso raro, superfícies elevadas) */
+  --shadow-card: 0 1px 2px rgba(18, 24, 43, 0.04), 0 8px 24px rgba(18, 24, 43, 0.06);
+}
+
+/* ============================== RESET BASE ============================== */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--color-ink);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+p { margin: 0; color: var(--color-ink-soft); }
+
+a { color: inherit; text-decoration: none; }
+
+img, svg { display: block; max-width: 100%; }
+
+button { font-family: inherit; cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--color-route);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--space-3);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-route);
+  background: rgba(30, 94, 255, 0.08);
+  padding: 0.35em 0.9em;
+  border-radius: var(--radius-full);
+}
+
+/* ================================ NAV =================================== */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(241, 242, 244, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+}
+
+.nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+}
+
+.nav__links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.nav__links a { color: var(--color-ink-soft); transition: color 0.15s ease; }
+.nav__links a:hover { color: var(--color-ink); }
+
+@media (max-width: 720px) {
+  .nav__links a:not(.btn) { display: none; }
+}
+
+/* =============================== BOTÕES ================================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 0.85em 1.6em;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover { transform: translateY(-1px); }
+
+.btn-primary {
+  background: var(--color-route);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--color-route-dark); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--color-ink);
+  border-color: var(--color-line);
+}
+.btn-secondary:hover { border-color: var(--color-ink); }
+
+/* ================================ HERO =================================== */
+.hero {
+  padding: var(--space-6) 0 var(--space-5);
+}
+
+.hero__grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: var(--space-5);
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .hero__grid { grid-template-columns: 1fr; }
+}
+
+.hero__title {
+  font-size: var(--text-3xl);
+  margin: var(--space-2) 0 var(--space-2);
+}
+
+.hero__subtitle {
+  font-size: var(--text-lg);
+  max-width: 40ch;
+  margin-bottom: var(--space-3);
+}
+
+.hero__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ============================ ROUTE LINE (assinatura) ==================== */
+/* Elemento-assinatura: uma linha de rota com paradas e um ponto pulsante
+   representando o ônibus em tempo real. Reutilizada de forma horizontal no
+   hero e vertical na seção "Como funciona" (onde a sequência é literal). */
+
+.route-line {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-2);
+}
+
+.route-line::before {
+  content: '';
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  top: 50%;
+  height: 2px;
+  background: var(--color-line);
+  transform: translateY(-50%);
+}
+
+.route-line__stop {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 2px solid var(--color-route);
+}
+
+.route-line__stop--live {
+  border-color: var(--color-stop);
+  background: var(--color-stop);
+  box-shadow: 0 0 0 0 rgba(255, 138, 52, 0.6);
+  animation: pulse 2s infinite;
+}
+
+.route-line__label {
+  position: absolute;
+  top: calc(100% + 0.6em);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 138, 52, 0.55); }
+  70%  { box-shadow: 0 0 0 12px rgba(255, 138, 52, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 138, 52, 0); }
+}
+
+/* Variante vertical, usada em "Como funciona" */
+.route-line--vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  gap: var(--space-4);
+}
+
+.route-line--vertical::before {
+  left: 6px;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  right: auto;
+  width: 2px;
+  height: auto;
+}
+
+.route-line--vertical .route-line__stop {
+  margin-left: 0;
+}
+
+.route-line--vertical .route-line__item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-left: 0;
+}
+
+.route-line--vertical .route-line__text h3 {
+  font-size: var(--text-base);
+  margin-bottom: 0.3em;
+}
+
+.route-line--vertical .route-line__text p { font-size: var(--text-sm); }
+
+/* ============================ STATS ROW ================================= */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+@media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.stat__number {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  color: var(--color-route);
+}
+
+.stat__label {
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
+}
+
+/* ============================== SECTIONS ================================= */
+.section {
+  padding: var(--space-6) 0;
+}
+
+.section__header {
+  max-width: 56ch;
+  margin-bottom: var(--space-4);
+}
+
+.section__header h2 {
+  font-size: var(--text-2xl);
+  margin: var(--space-1) 0 var(--space-2);
+}
+
+/* =============================== CARDS GRID =============================== */
+.grid-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+@media (max-width: 900px) {
+  .grid-features { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .grid-features { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card);
+}
+
+.card__icon { font-size: var(--text-xl); margin-bottom: var(--space-1); }
+
+.card__title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: 0.4em;
+}
+
+.card__desc { font-size: var(--text-sm); }
+
+/* ============================== TECH CHIPS ================================ */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.5em 1em;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+}
+
+/* ================================ CTA FINAL ================================ */
+.cta-final {
+  text-align: center;
+  padding: var(--space-6) var(--space-3);
+  background: var(--color-ink);
+  color: #fff;
+  border-radius: var(--radius-md);
+}
+
+.cta-final h2 {
+  color: #fff;
+  font-size: var(--text-2xl);
+  margin-bottom: var(--space-2);
+}
+
+.cta-final p {
+  color: rgba(255, 255, 255, 0.7);
+  max-width: 46ch;
+  margin: 0 auto var(--space-3);
+}
+
+/* ================================ FOOTER =================================== */
+.footer {
+  padding: var(--space-4) 0 var(--space-5);
+  border-top: 1px solid var(--color-line);
+  margin-top: var(--space-5);
+}
+
+.footer__inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-ink-soft);
+}
+
+.footer__links {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.footer__links a:hover { color: var(--color-ink); }
