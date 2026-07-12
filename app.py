@@ -15,7 +15,7 @@ import pydeck as pdk
 import streamlit as st
 from dotenv import load_dotenv
 
-from sptrans_client import SPTransClient, SPTransAuthError, SPTransAPIError
+from sptrans_client import SPTransClient, SPTransAuthError, SPTransAPIError, CLIENT_VERSION
 
 load_dotenv()
 
@@ -71,6 +71,7 @@ except Exception as e:
 
 st.sidebar.success("Autenticado ✅")
 st.sidebar.caption(f"Última renovação de sessão: {datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"🔧 sptrans_client versão: `{CLIENT_VERSION}`")
 
 
 def call_api(func, *args, **kwargs):
