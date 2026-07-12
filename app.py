@@ -215,10 +215,20 @@ with tab_empresas:
             dados_emp = call_api(client.listar_empresas)
 
         linhas_flat = []
+        estrutura_inesperada = False
         for area_bloco in (dados_emp or []):
+            if not isinstance(area_bloco, dict):
+                estrutura_inesperada = True
+                continue
             for area in area_bloco.get("e", []):
+                if not isinstance(area, dict):
+                    estrutura_inesperada = True
+                    continue
                 cod_area = area.get("a")
                 for emp in area.get("e", []):
+                    if not isinstance(emp, dict):
+                        estrutura_inesperada = True
+                        continue
                     linhas_flat.append(
                         {
                             "Área": cod_area,
@@ -226,6 +236,15 @@ with tab_empresas:
                             "Nome": emp.get("n"),
                         }
                     )
+
+        if estrutura_inesperada:
+            st.warning(
+                "A API retornou parte dos dados em um formato inesperado (itens ignorados). "
+                "Exibindo o que foi possível interpretar abaixo."
+            )
+            with st.expander("Ver resposta bruta da API (debug)"):
+                st.json(dados_emp)
+
         if linhas_flat:
             df_emp = pd.DataFrame(linhas_flat)
             areas_disponiveis = sorted(df_emp["Área"].unique())
@@ -312,8 +331,14 @@ with tab_posicao:
         empresas = call_api(client.listar_empresas)
         opcoes_emp = {}
         for area_bloco in (empresas or []):
+            if not isinstance(area_bloco, dict):
+                continue
             for area in area_bloco.get("e", []):
+                if not isinstance(area, dict):
+                    continue
                 for emp in area.get("e", []):
+                    if not isinstance(emp, dict):
+                        continue
                     opcoes_emp[f"{emp.get('n')} (cód. {emp.get('c')})"] = emp.get("c")
 
         col_e1, col_e2 = st.columns(2)
