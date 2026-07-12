@@ -61,7 +61,7 @@ O cadastro completo de linhas existe, mas em outra fonte: o **GTFS estático**
 da SPTrans (arquivo `.zip` com `routes.txt`, `stops.txt`, etc.), baixado
 separadamente (com login próprio, diferente do token da API). A aba
 **📚 Todas as Linhas (GTFS)** lê esse arquivo — via upload manual na tela, ou
-automaticamente se você salvar o `.zip` em `gtfs/gtfs.zip` no repositório.
+automaticamente se você salvar o `.zip` em `gtfs.zip` na raiz do repositório.
 
 Veja o passo a passo de como obter o arquivo diretamente na aba do app
 (expander "ℹ️ Como obter o arquivo GTFS").
