@@ -114,7 +114,7 @@ with tab_linhas:
         termo_linha = st.text_input(
             "Termo de busca",
             value="",
-            placeholder="Ex: 8000, Lapa, Ramos — deixe em branco para listar todas as linhas",
+            placeholder="Ex: 8000, Lapa, Ramos (obrigatório)",
             key="termo_linha",
         )
     with col2:
@@ -126,7 +126,12 @@ with tab_linhas:
 
     if st.button("Buscar linhas", key="btn_buscar_linha"):
         if not termo_linha.strip():
-            st.info("Nenhum termo informado — retornando **todas as linhas** do sistema.")
+            st.info(
+                "Nenhum termo informado. Este endpoint da API exige um termo de busca "
+                "(não existe opção de 'listar todas as linhas' na API Olho Vivo) — "
+                "tente um número ou nome, ex: 8000, Lapa."
+            )
+            st.stop()
         with st.spinner("Consultando API..."):
             if filtrar_sentido == "Ambos":
                 resultado = call_api(client.buscar_linhas, termo_linha.strip())
