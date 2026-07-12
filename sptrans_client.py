@@ -13,6 +13,8 @@ from typing import Optional, List, Dict, Any
 
 BASE_URL = "https://api.olhovivo.sptrans.com.br/v2.1"
 
+CLIENT_VERSION = "v2-diagnostico-401"  # marcador para confirmar que o deploy está atualizado
+
 
 class SPTransAuthError(Exception):
     """Erro de autenticação (token inválido/expirado ou IP bloqueado pela SPTrans)."""
@@ -68,8 +70,12 @@ class SPTransClient:
         except requests.exceptions.RequestException as e:
             raise SPTransAPIError(f"Falha de conexão ao chamar {path}: {e}") from e
 
-        # Se a sessão expirou, o retorno costuma vir vazio/errado -> tenta reautenticar 1x
+        # Se a sessão expirou (ou o cookie ficou inválido), tenta reautenticar do zero
+        # usando uma NOVA sessão HTTP (evita reaproveitar cookie/conexão possivelmente
+        # presos a um IP de saída diferente, comum em ambientes de nuvem com egress rotativo).
         if resp.status_code == 401:
+            self.session = requests.Session()
+            self._autenticado = False
             self.autenticar()
             try:
                 resp = self.session.get(url, params=params, timeout=15)
