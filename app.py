@@ -111,7 +111,12 @@ with tab_linhas:
 
     col1, col2 = st.columns([3, 1])
     with col1:
-        termo_linha = st.text_input("Termo de busca", value="Lapa", key="termo_linha")
+        termo_linha = st.text_input(
+            "Termo de busca",
+            value="",
+            placeholder="Ex: 8000, Lapa, Ramos — deixe em branco para listar todas as linhas",
+            key="termo_linha",
+        )
     with col2:
         filtrar_sentido = st.selectbox(
             "Sentido (opcional)",
@@ -120,12 +125,14 @@ with tab_linhas:
         )
 
     if st.button("Buscar linhas", key="btn_buscar_linha"):
+        if not termo_linha.strip():
+            st.info("Nenhum termo informado — retornando **todas as linhas** do sistema.")
         with st.spinner("Consultando API..."):
             if filtrar_sentido == "Ambos":
-                resultado = call_api(client.buscar_linhas, termo_linha)
+                resultado = call_api(client.buscar_linhas, termo_linha.strip())
             else:
                 sentido_num = 1 if filtrar_sentido.startswith("1") else 2
-                resultado = call_api(client.buscar_linha_sentido, termo_linha, sentido_num)
+                resultado = call_api(client.buscar_linha_sentido, termo_linha.strip(), sentido_num)
 
         if resultado:
             df = pd.DataFrame(resultado)
