@@ -36,11 +36,12 @@ https://www.sptrans.com.br/desenvolvedores/api-do-olho-vivo-guia-de-referencia/d
 
 ## ✨ Funcionalidades
 
-O app é dividido em 7 abas, uma para cada categoria de dado da API:
+O app é dividido em 8 abas:
 
 | Aba | O que faz | Filtros disponíveis |
 |---|---|---|
-| 🔎 **Linhas** | Busca linhas de ônibus por número ou nome | Termo de busca, sentido (Principal→Secundário / Secundário→Principal / ambos) |
+| 🔎 **Linhas** | Busca linhas de ônibus por número ou nome (via API, tempo real) | Termo de busca, sentido (Principal→Secundário / Secundário→Principal / ambos) |
+| 📚 **Todas as Linhas (GTFS)** | Lista **todo** o cadastro de linhas do sistema, a partir do arquivo GTFS estático | Filtro por número/nome, por tipo de rota (`route_type`) |
 | 📍 **Paradas** | Busca pontos de parada | Por nome/endereço, por código de linha, ou por código de corredor |
 | 🛣️ **Corredores** | Lista todos os corredores inteligentes da cidade | — |
 | 🏢 **Empresas** | Lista empresas operadoras do sistema | Filtro por área de operação |
@@ -49,6 +50,22 @@ O app é dividido em 7 abas, uma para cada categoria de dado da API:
 | 🗺️ **Mapa Geral (Tempo Real)** | Mapa interativo com toda a frota em operação | Filtro por letreiro, somente acessíveis, auto-atualização a cada 30s |
 
 Todos os resultados são exibidos em tabelas (`pandas`) e, quando fazem sentido geograficamente, em mapas (`st.map` ou `pydeck` para o mapa interativo).
+
+### Por que uma aba separada para "Todas as Linhas"?
+
+A API Olho Vivo **não tem um endpoint que liste todas as linhas de uma vez** —
+o `/Linha/Buscar` exige um termo de busca (número ou nome), retornando `404`
+se o parâmetro vier vazio. Não existe forma de "listar tudo" só com essa API.
+
+O cadastro completo de linhas existe, mas em outra fonte: o **GTFS estático**
+da SPTrans (arquivo `.zip` com `routes.txt`, `stops.txt`, etc.), baixado
+separadamente (com login próprio, diferente do token da API). A aba
+**📚 Todas as Linhas (GTFS)** lê esse arquivo — via upload manual na tela, ou
+automaticamente se você salvar o `.zip` em `gtfs/gtfs.zip` no repositório.
+
+Veja o passo a passo de como obter o arquivo diretamente na aba do app
+(expander "ℹ️ Como obter o arquivo GTFS").
+
 
 ---
 
