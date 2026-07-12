@@ -15,7 +15,7 @@ import pydeck as pdk
 import streamlit as st
 from dotenv import load_dotenv
 
-from sptrans_client import SPTransClient
+from sptrans_client import SPTransClient, SPTransAuthError, SPTransAPIError
 
 load_dotenv()
 
@@ -56,12 +56,37 @@ if not token:
 
 try:
     client = get_client(token)
+except SPTransAuthError as e:
+    st.error(f"❌ Falha de autenticação: {e}")
+    st.info(
+        "Dica: se você estiver no Streamlit Community Cloud, a SPTrans às vezes "
+        "bloqueia por firewall os IPs de provedores de nuvem/datacenter. Isso é um "
+        "bloqueio do lado da SPTrans, não um bug no código — nesse caso, considere "
+        "rodar localmente ou usar um servidor com IP residencial/dedicado."
+    )
+    st.stop()
 except Exception as e:
-    st.error(f"Falha ao autenticar na API: {e}")
+    st.error(f"Falha inesperada ao autenticar na API: {e}")
     st.stop()
 
 st.sidebar.success("Autenticado ✅")
 st.sidebar.caption(f"Última renovação de sessão: {datetime.now().strftime('%H:%M:%S')}")
+
+
+def call_api(func, *args, **kwargs):
+    """Executa uma chamada à API tratando erros de forma visível ao usuário,
+    em vez de deixar o Streamlit redigir a exceção."""
+    try:
+        return func(*args, **kwargs)
+    except SPTransAuthError as e:
+        st.error(f"❌ Sessão expirou ou token foi recusado: {e}")
+        return None
+    except SPTransAPIError as e:
+        st.error(f"❌ Erro ao consultar a API: {e}")
+        return None
+    except Exception as e:
+        st.error(f"❌ Erro inesperado: {e}")
+        return None
 
 # ------------------------------------------------------------------
 # Navegação por abas — uma por categoria da API
@@ -96,10 +121,10 @@ with tab_linhas:
     if st.button("Buscar linhas", key="btn_buscar_linha"):
         with st.spinner("Consultando API..."):
             if filtrar_sentido == "Ambos":
-                resultado = client.buscar_linhas(termo_linha)
+                resultado = call_api(client.buscar_linhas, termo_linha)
             else:
                 sentido_num = 1 if filtrar_sentido.startswith("1") else 2
-                resultado = client.buscar_linha_sentido(termo_linha, sentido_num)
+                resultado = call_api(client.buscar_linha_sentido, termo_linha, sentido_num)
 
         if resultado:
             df = pd.DataFrame(resultado)
@@ -137,7 +162,7 @@ with tab_paradas:
         termo_parada = st.text_input("Nome da parada ou endereço", value="Afonso", key="termo_parada")
         if st.button("Buscar paradas", key="btn_buscar_parada"):
             with st.spinner("Consultando API..."):
-                resultado_paradas = client.buscar_paradas(termo_parada)
+                resultado_paradas = call_api(client.buscar_paradas, termo_parada)
 
     elif modo_parada == "Por código de linha":
         codigo_linha_parada = st.number_input(
@@ -145,16 +170,16 @@ with tab_paradas:
         )
         if st.button("Buscar paradas da linha", key="btn_buscar_parada_linha"):
             with st.spinner("Consultando API..."):
-                resultado_paradas = client.buscar_paradas_por_linha(int(codigo_linha_parada))
+                resultado_paradas = call_api(client.buscar_paradas_por_linha, int(codigo_linha_parada))
 
     else:  # Por corredor
-        corredores = client.listar_corredores()
-        opcoes_corredor = {f"{c['nc']} (cód. {c['cc']})": c["cc"] for c in corredores}
+        corredores = call_api(client.listar_corredores)
+        opcoes_corredor = {f"{c['nc']} (cód. {c['cc']})": c["cc"] for c in (corredores or [])}
         if opcoes_corredor:
             escolha_corredor = st.selectbox("Corredor", options=list(opcoes_corredor.keys()), key="sel_corredor_parada")
             if st.button("Buscar paradas do corredor", key="btn_buscar_parada_corredor"):
                 with st.spinner("Consultando API..."):
-                    resultado_paradas = client.buscar_paradas_por_corredor(opcoes_corredor[escolha_corredor])
+                    resultado_paradas = call_api(client.buscar_paradas_por_corredor, opcoes_corredor[escolha_corredor])
         else:
             st.info("Não foi possível carregar a lista de corredores.")
 
@@ -173,7 +198,7 @@ with tab_corredores:
     st.header("Corredores Inteligentes")
     if st.button("Listar corredores", key="btn_corredores"):
         with st.spinner("Consultando API..."):
-            corredores = client.listar_corredores()
+            corredores = call_api(client.listar_corredores)
         if corredores:
             df_c = pd.DataFrame(corredores).rename(columns={"cc": "Código", "nc": "Nome"})
             st.dataframe(df_c, use_container_width=True)
@@ -186,10 +211,10 @@ with tab_empresas:
     st.header("Empresas Operadoras")
     if st.button("Listar empresas", key="btn_empresas"):
         with st.spinner("Consultando API..."):
-            dados_emp = client.listar_empresas()
+            dados_emp = call_api(client.listar_empresas)
 
         linhas_flat = []
-        for area_bloco in dados_emp:
+        for area_bloco in (dados_emp or []):
             for area in area_bloco.get("e", []):
                 cod_area = area.get("a")
                 for emp in area.get("e", []):
@@ -225,8 +250,8 @@ with tab_posicao:
         st.caption("Retorna a posição de TODOS os veículos em operação agora (pode ser um volume grande).")
         if st.button("Atualizar posições", key="btn_pos_todos"):
             with st.spinner("Consultando API..."):
-                dados = client.posicao_todos()
-            linhas = dados.get("l", [])
+                dados = call_api(client.posicao_todos)
+            linhas = (dados or {}).get("l", [])
             registros = []
             for linha in linhas:
                 for v in linha.get("vs", []):
@@ -244,7 +269,7 @@ with tab_posicao:
                             "lon": v.get("px"),
                         }
                     )
-            if registros:
+            if dados is not None and registros:
                 df_pos = pd.DataFrame(registros)
                 st.caption(f"Horário de referência da API: {dados.get('hr')} | {len(df_pos)} veículo(s)")
 
@@ -270,8 +295,8 @@ with tab_posicao:
         )
         if st.button("Consultar posição da linha", key="btn_pos_linha"):
             with st.spinner("Consultando API..."):
-                dados = client.posicao_por_linha(int(codigo_linha_pos))
-            veiculos = dados.get("vs", [])
+                dados = call_api(client.posicao_por_linha, int(codigo_linha_pos))
+            veiculos = (dados or {}).get("vs", [])
             if veiculos:
                 df_v = pd.DataFrame(veiculos).rename(
                     columns={"p": "Prefixo", "a": "Acessível", "ta": "Horário (UTC)", "py": "lat", "px": "lon"}
@@ -283,9 +308,9 @@ with tab_posicao:
                 st.info("Nenhum veículo encontrado para essa linha no momento.")
 
     else:  # Por empresa/garagem
-        empresas = client.listar_empresas()
+        empresas = call_api(client.listar_empresas)
         opcoes_emp = {}
-        for area_bloco in empresas:
+        for area_bloco in (empresas or []):
             for area in area_bloco.get("e", []):
                 for emp in area.get("e", []):
                     opcoes_emp[f"{emp.get('n')} (cód. {emp.get('c')})"] = emp.get("c")
@@ -304,10 +329,10 @@ with tab_posicao:
 
         if st.button("Consultar veículos na garagem", key="btn_pos_garagem"):
             with st.spinner("Consultando API..."):
-                dados = client.posicao_por_garagem(
+                dados = call_api(client.posicao_por_garagem, 
                     int(codigo_empresa), int(codigo_linha_garagem) if codigo_linha_garagem else None
                 )
-            linhas = dados.get("l", [])
+            linhas = (dados or {}).get("l", [])
             registros = []
             for linha in linhas:
                 for v in linha.get("vs", []):
@@ -349,8 +374,8 @@ with tab_previsao:
 
         if st.button("Consultar previsão", key="btn_prev1"):
             with st.spinner("Consultando API..."):
-                dados = client.previsao_parada_linha(int(cod_parada_prev), int(cod_linha_prev))
-            p = dados.get("p", {})
+                dados = call_api(client.previsao_parada_linha, int(cod_parada_prev), int(cod_linha_prev))
+            p = (dados or {}).get("p", {})
             if p:
                 st.subheader(f"📍 {p.get('np')}")
                 registros = []
@@ -377,8 +402,8 @@ with tab_previsao:
         cod_linha_prev2 = st.number_input("Código da linha", min_value=0, step=1, key="cod_linha_prev2")
         if st.button("Consultar previsão da linha", key="btn_prev2"):
             with st.spinner("Consultando API..."):
-                dados = client.previsao_por_linha(int(cod_linha_prev2))
-            paradas = dados.get("ps", [])
+                dados = call_api(client.previsao_por_linha, int(cod_linha_prev2))
+            paradas = (dados or {}).get("ps", [])
             registros = []
             for parada in paradas:
                 for v in parada.get("vs", []):
@@ -407,8 +432,8 @@ with tab_previsao:
         cod_parada_prev3 = st.number_input("Código da parada", min_value=0, step=1, key="cod_parada_prev3")
         if st.button("Consultar previsão da parada", key="btn_prev3"):
             with st.spinner("Consultando API..."):
-                dados = client.previsao_por_parada(int(cod_parada_prev3))
-            p = dados.get("p", {})
+                dados = call_api(client.previsao_por_parada, int(cod_parada_prev3))
+            p = (dados or {}).get("p", {})
             if p:
                 st.subheader(f"📍 {p.get('np')}")
                 registros = []
@@ -458,8 +483,8 @@ with tab_mapa:
     placeholder = st.empty()
 
     def carregar_e_exibir():
-        dados = client.posicao_todos()
-        linhas = dados.get("l", [])
+        dados = call_api(client.posicao_todos)
+        linhas = (dados or {}).get("l", [])
         registros = []
         for linha in linhas:
             for v in linha.get("vs", []):
