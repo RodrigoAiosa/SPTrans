@@ -221,28 +221,27 @@ with tab_empresas:
         with st.spinner("Consultando API..."):
             dados_emp = call_api(client.listar_empresas)
 
+        dados_emp = dados_emp if isinstance(dados_emp, dict) else {}
+        horario_ref = dados_emp.get("hr")
+
         linhas_flat = []
         estrutura_inesperada = False
-        for area_bloco in (dados_emp or []):
-            if not isinstance(area_bloco, dict):
+        for area in dados_emp.get("e", []) or []:
+            if not isinstance(area, dict):
                 estrutura_inesperada = True
                 continue
-            for area in area_bloco.get("e", []):
-                if not isinstance(area, dict):
+            cod_area = area.get("a")
+            for emp in area.get("e", []) or []:
+                if not isinstance(emp, dict):
                     estrutura_inesperada = True
                     continue
-                cod_area = area.get("a")
-                for emp in area.get("e", []):
-                    if not isinstance(emp, dict):
-                        estrutura_inesperada = True
-                        continue
-                    linhas_flat.append(
-                        {
-                            "Área": cod_area,
-                            "Código Empresa": emp.get("c"),
-                            "Nome": emp.get("n"),
-                        }
-                    )
+                linhas_flat.append(
+                    {
+                        "Área": cod_area,
+                        "Código Empresa": emp.get("c"),
+                        "Nome": emp.get("n"),
+                    }
+                )
 
         if estrutura_inesperada:
             st.warning(
@@ -253,12 +252,11 @@ with tab_empresas:
                 st.json(dados_emp)
 
         if linhas_flat:
-            df_emp = pd.DataFrame(linhas_flat)
-            areas_disponiveis = sorted(df_emp["Área"].unique())
-            area_filtro = st.multiselect("Filtrar por área", options=areas_disponiveis, default=areas_disponiveis)
-            df_emp_filtrado = df_emp[df_emp["Área"].isin(area_filtro)]
-            st.dataframe(df_emp_filtrado, use_container_width=True)
-            st.caption(f"{len(df_emp_filtrado)} empresa(s) exibidas de {len(df_emp)} totais.")
+            if horario_ref:
+                st.caption(f"Horário de referência: {horario_ref}")
+            nomes = sorted({item["Nome"] for item in linhas_flat if item["Nome"]})
+            st.dataframe(pd.DataFrame({"Nome": nomes}), use_container_width=True)
+            st.caption(f"{len(nomes)} empresa(s) encontradas.")
         else:
             st.info("Nenhuma empresa retornada.")
 
@@ -336,17 +334,15 @@ with tab_posicao:
 
     else:  # Por empresa/garagem
         empresas = call_api(client.listar_empresas)
+        empresas = empresas if isinstance(empresas, dict) else {}
         opcoes_emp = {}
-        for area_bloco in (empresas or []):
-            if not isinstance(area_bloco, dict):
+        for area in empresas.get("e", []) or []:
+            if not isinstance(area, dict):
                 continue
-            for area in area_bloco.get("e", []):
-                if not isinstance(area, dict):
+            for emp in area.get("e", []) or []:
+                if not isinstance(emp, dict):
                     continue
-                for emp in area.get("e", []):
-                    if not isinstance(emp, dict):
-                        continue
-                    opcoes_emp[f"{emp.get('n')} (cód. {emp.get('c')})"] = emp.get("c")
+                opcoes_emp[f"{emp.get('n')} (cód. {emp.get('c')})"] = emp.get("c")
 
         col_e1, col_e2 = st.columns(2)
         with col_e1:
