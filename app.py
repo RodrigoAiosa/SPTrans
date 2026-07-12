@@ -9,6 +9,7 @@ Rodar com: streamlit run app.py
 import os
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import pydeck as pdk
@@ -16,6 +17,21 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from sptrans_client import SPTransClient, SPTransAuthError, SPTransAPIError, CLIENT_VERSION
+
+TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+def utc_iso_para_brasilia(valor_utc) -> str:
+    """Converte um timestamp ISO 8601 em UTC (ex: '2026-07-12T06:46:54Z') vindo
+    da API para uma string no horário de Brasília. Se não for possível
+    interpretar o valor, retorna-o sem alteração."""
+    if not valor_utc or not isinstance(valor_utc, str):
+        return valor_utc
+    try:
+        dt_utc = datetime.fromisoformat(valor_utc.replace("Z", "+00:00"))
+        return dt_utc.astimezone(TZ_BRASILIA).strftime("%d/%m/%Y %H:%M:%S")
+    except ValueError:
+        return valor_utc
 
 load_dotenv()
 
@@ -70,7 +86,7 @@ except Exception as e:
     st.stop()
 
 st.sidebar.success("Autenticado ✅")
-st.sidebar.caption(f"Última renovação de sessão: {datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"Última renovação de sessão: {datetime.now(TZ_BRASILIA).strftime('%H:%M:%S')} (Brasília)")
 st.sidebar.caption(f"🔧 sptrans_client versão: `{CLIENT_VERSION}`")
 
 
@@ -294,7 +310,7 @@ with tab_posicao:
                             "Origem": linha.get("lt1"),
                             "Prefixo Veículo": v.get("p"),
                             "Acessível": v.get("a"),
-                            "Horário Captura (UTC)": v.get("ta"),
+                            "Horário Captura (Brasília)": utc_iso_para_brasilia(v.get("ta")),
                             "lat": v.get("py"),
                             "lon": v.get("px"),
                         }
@@ -328,8 +344,11 @@ with tab_posicao:
                 dados = call_api(client.posicao_por_linha, int(codigo_linha_pos))
             veiculos = (dados or {}).get("vs", [])
             if veiculos:
-                df_v = pd.DataFrame(veiculos).rename(
-                    columns={"p": "Prefixo", "a": "Acessível", "ta": "Horário (UTC)", "py": "lat", "px": "lon"}
+                df_v = pd.DataFrame(veiculos)
+                if "ta" in df_v.columns:
+                    df_v["ta"] = df_v["ta"].apply(utc_iso_para_brasilia)
+                df_v = df_v.rename(
+                    columns={"p": "Prefixo", "a": "Acessível", "ta": "Horário (Brasília)", "py": "lat", "px": "lon"}
                 )
                 st.caption(f"Horário de referência: {dados.get('hr')} | {len(df_v)} veículo(s) na linha")
                 st.dataframe(df_v, use_container_width=True)
@@ -376,7 +395,7 @@ with tab_posicao:
                             "Código Linha": linha.get("cl"),
                             "Prefixo Veículo": v.get("p"),
                             "Acessível": v.get("a"),
-                            "Horário (UTC)": v.get("ta"),
+                            "Horário (Brasília)": utc_iso_para_brasilia(v.get("ta")),
                             "lat": v.get("py"),
                             "lon": v.get("px"),
                         }
