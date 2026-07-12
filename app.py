@@ -37,13 +37,21 @@ def get_client(token: str) -> SPTransClient:
 
 def sidebar_token() -> str:
     st.sidebar.title("🚌 Olho Vivo Dashboard")
-    default_token = os.getenv("SPTRANS_TOKEN", "")
+
+    # Prioridade: st.secrets (Streamlit Cloud) -> variável de ambiente (.env local) -> vazio
+    default_token = ""
+    try:
+        default_token = st.secrets["SPTRANS_TOKEN"]
+    except (KeyError, FileNotFoundError):
+        default_token = os.getenv("SPTRANS_TOKEN", "")
+
     token = st.sidebar.text_input(
         "Token da API (SPTrans)",
         value=default_token,
         type="password",
         help="Gerado em 'Meus Aplicativos' no site da SPTrans. "
-        "Pode ser definido também no arquivo .env como SPTRANS_TOKEN.",
+        "No Streamlit Cloud, configure em App settings → Secrets como SPTRANS_TOKEN = \"seu_token\". "
+        "Localmente, pode usar o arquivo .env.",
     )
     return token
 
