@@ -100,17 +100,16 @@ class SPTransClient:
     # ---------------- Linhas ----------------
     def buscar_linhas(self, termos_busca: str = "") -> List[Dict]:
         """GET /Linha/Buscar?termosBusca=... Aceita número ou nome (ex: 8000, Lapa).
-        Se termos_busca vier vazio, o parâmetro é omitido e a API retorna TODAS as linhas."""
-        params = {"termosBusca": termos_busca} if termos_busca else {}
-        return self._get("/Linha/Buscar", params) or []
+        Este endpoint EXIGE o parâmetro na URL (omiti-lo retorna 404), então enviamos
+        sempre a chave, mesmo com valor vazio."""
+        return self._get("/Linha/Buscar", {"termosBusca": termos_busca or ""}) or []
 
     def buscar_linha_sentido(self, termos_busca: str, sentido: int) -> List[Dict]:
-        """GET /Linha/BuscarLinhaSentido?termosBusca=...&sentido=1|2
-        Se termos_busca vier vazio, o parâmetro é omitido (retorna todas as linhas do sentido)."""
-        params = {"sentido": sentido}
-        if termos_busca:
-            params["termosBusca"] = termos_busca
-        return self._get("/Linha/BuscarLinhaSentido", params) or []
+        """GET /Linha/BuscarLinhaSentido?termosBusca=...&sentido=1|2"""
+        return self._get(
+            "/Linha/BuscarLinhaSentido",
+            {"termosBusca": termos_busca or "", "sentido": sentido},
+        ) or []
 
     # ---------------- Paradas ----------------
     def buscar_paradas(self, termos_busca: str) -> List[Dict]:
