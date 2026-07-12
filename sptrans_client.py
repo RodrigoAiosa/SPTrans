@@ -14,6 +14,14 @@ from typing import Optional, List, Dict, Any
 BASE_URL = "https://api.olhovivo.sptrans.com.br/v2.1"
 
 
+class SPTransAuthError(Exception):
+    """Erro de autenticação (token inválido/expirado ou IP bloqueado pela SPTrans)."""
+
+
+class SPTransAPIError(Exception):
+    """Erro de chamada à API, com detalhes de status/corpo da resposta para diagnóstico."""
+
+
 class SPTransClient:
     def __init__(self, token: str):
         if not token:
@@ -25,24 +33,63 @@ class SPTransClient:
     def autenticar(self) -> bool:
         """POST /Login/Autenticar?token={token} -> True/False. Cookie é salvo na Session."""
         url = f"{BASE_URL}/Login/Autenticar"
-        resp = self.session.post(url, params={"token": self.token}, timeout=15)
-        resp.raise_for_status()
+        try:
+            resp = self.session.post(url, params={"token": self.token}, timeout=15)
+        except requests.exceptions.RequestException as e:
+            raise SPTransAuthError(
+                f"Não foi possível conectar à API do Olho Vivo: {e}"
+            ) from e
+
+        if resp.status_code != 200:
+            raise SPTransAuthError(
+                f"Falha ao autenticar (HTTP {resp.status_code}). "
+                f"Resposta da API: {resp.text[:300]!r}. "
+                "Verifique se o token está correto/ativo em 'Meus Aplicativos'. "
+                "Se o token estiver correto, a SPTrans pode estar bloqueando o IP "
+                "deste servidor (comum em provedores de nuvem como Streamlit Cloud)."
+            )
+
         self._autenticado = resp.text.strip().lower() == "true"
+        if not self._autenticado:
+            raise SPTransAuthError(
+                "A API respondeu 200 mas recusou o token (retornou 'false'). "
+                "Gere um novo token em 'Meus Aplicativos' no site da SPTrans e confirme "
+                "que ele foi copiado sem espaços extras."
+            )
         return self._autenticado
 
     def _get(self, path: str, params: Optional[dict] = None) -> Any:
         if not self._autenticado:
             self.autenticar()
+
         url = f"{BASE_URL}{path}"
-        resp = self.session.get(url, params=params, timeout=15)
+        try:
+            resp = self.session.get(url, params=params, timeout=15)
+        except requests.exceptions.RequestException as e:
+            raise SPTransAPIError(f"Falha de conexão ao chamar {path}: {e}") from e
+
         # Se a sessão expirou, o retorno costuma vir vazio/errado -> tenta reautenticar 1x
         if resp.status_code == 401:
             self.autenticar()
-            resp = self.session.get(url, params=params, timeout=15)
-        resp.raise_for_status()
+            try:
+                resp = self.session.get(url, params=params, timeout=15)
+            except requests.exceptions.RequestException as e:
+                raise SPTransAPIError(f"Falha de conexão ao chamar {path}: {e}") from e
+
+        if resp.status_code != 200:
+            raise SPTransAPIError(
+                f"Erro HTTP {resp.status_code} em {path}. "
+                f"Resposta da API: {resp.text[:300]!r}"
+            )
+
         if not resp.text:
             return None
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError as e:
+            raise SPTransAPIError(
+                f"Resposta de {path} não é JSON válido: {resp.text[:300]!r}"
+            ) from e
 
     # ---------------- Linhas ----------------
     def buscar_linhas(self, termos_busca: str) -> List[Dict]:
