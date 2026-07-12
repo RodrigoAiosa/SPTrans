@@ -6,8 +6,10 @@ Posição dos veículos e Previsão de chegada.
 Rodar com: streamlit run app.py
 """
 
+import io
 import os
 import time
+import zipfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -108,9 +110,10 @@ def call_api(func, *args, **kwargs):
 # ------------------------------------------------------------------
 # Navegação por abas — uma por categoria da API
 # ------------------------------------------------------------------
-tab_linhas, tab_paradas, tab_corredores, tab_empresas, tab_posicao, tab_previsao, tab_mapa = st.tabs(
+tab_linhas, tab_gtfs, tab_paradas, tab_corredores, tab_empresas, tab_posicao, tab_previsao, tab_mapa = st.tabs(
     [
         "🔎 Linhas",
+        "📚 Todas as Linhas (GTFS)",
         "📍 Paradas",
         "🛣️ Corredores",
         "🏢 Empresas",
@@ -173,6 +176,104 @@ with tab_linhas:
             st.caption(f"{len(resultado)} linha(s) encontrada(s).")
         else:
             st.info("Nenhuma linha encontrada para esse termo.")
+
+# ==================== TODAS AS LINHAS (GTFS) ====================
+with tab_gtfs:
+    st.header("Todas as Linhas do Sistema (GTFS)")
+    st.caption(
+        "A API Olho Vivo não tem endpoint para listar todas as linhas de uma vez — "
+        "ela exige um termo de busca. Esta aba usa o **GTFS estático** da SPTrans "
+        "(cadastro completo de linhas), que é um arquivo separado da API em tempo real."
+    )
+
+    with st.expander("ℹ️ Como obter o arquivo GTFS"):
+        st.markdown(
+            """
+O GTFS da SPTrans **não tem link de download público direto** — é preciso login
+no portal de desenvolvedores (usuário/senha, diferente do token da API Olho Vivo):
+
+1. Acesse [sptrans.com.br/desenvolvedores](https://www.sptrans.com.br/desenvolvedores/)
+   → **GTFS → Acessar** → faça login (crie uma conta se necessário)
+2. Baixe o arquivo `.zip` do GTFS
+3. Envie esse `.zip` no campo abaixo (ou salve como `gtfs.zip` na raiz do repositório
+   para o app carregar automaticamente, sem precisar enviar toda vez)
+
+> Esse arquivo é **estático** — atualizado periodicamente pela SPTrans, não em
+> tempo real. Ótimo para "quais linhas existem", não para posição/previsão ao vivo
+> (isso continua vindo da API Olho Vivo, nas outras abas).
+            """
+        )
+
+    GTFS_LOCAL_PATH = "gtfs.zip"
+
+    @st.cache_data(show_spinner="Lendo GTFS...")
+    def carregar_routes_de_zip(conteudo_zip: bytes) -> pd.DataFrame:
+        with zipfile.ZipFile(io.BytesIO(conteudo_zip)) as z:
+            nomes = z.namelist()
+            candidato = next((n for n in nomes if n.endswith("routes.txt")), None)
+            if not candidato:
+                raise ValueError("O arquivo routes.txt não foi encontrado dentro do .zip do GTFS.")
+            with z.open(candidato) as f:
+                return pd.read_csv(f, dtype=str)
+
+    df_routes = None
+    origem = None
+
+    arquivo_enviado = st.file_uploader("Enviar arquivo GTFS (.zip)", type=["zip"], key="upload_gtfs")
+
+    if arquivo_enviado is not None:
+        try:
+            df_routes = carregar_routes_de_zip(arquivo_enviado.read())
+            origem = "arquivo enviado"
+        except Exception as e:
+            st.error(f"Não foi possível ler o GTFS enviado: {e}")
+    elif os.path.exists(GTFS_LOCAL_PATH):
+        try:
+            with open(GTFS_LOCAL_PATH, "rb") as f:
+                df_routes = carregar_routes_de_zip(f.read())
+            origem = f"`{GTFS_LOCAL_PATH}` no repositório"
+        except Exception as e:
+            st.error(f"Não foi possível ler o GTFS local ({GTFS_LOCAL_PATH}): {e}")
+
+    if df_routes is not None:
+        st.success(f"GTFS carregado de {origem} — {len(df_routes)} linha(s) cadastradas.")
+
+        col_f1, col_f2 = st.columns([3, 1])
+        with col_f1:
+            termo_gtfs = st.text_input(
+                "Filtrar por número ou nome da linha", value="", key="termo_gtfs"
+            )
+        with col_f2:
+            # route_type do GTFS: 3 = ônibus (a maioria dos registros da SPTrans)
+            tipos_disponiveis = sorted(df_routes.get("route_type", pd.Series(dtype=str)).dropna().unique())
+            tipo_filtro = st.multiselect("Tipo (route_type)", options=tipos_disponiveis, default=tipos_disponiveis)
+
+        df_exibir = df_routes.copy()
+        if termo_gtfs.strip():
+            termo = termo_gtfs.strip().lower()
+            mask = pd.Series(False, index=df_exibir.index)
+            for col in ["route_short_name", "route_long_name", "route_id"]:
+                if col in df_exibir.columns:
+                    mask |= df_exibir[col].fillna("").str.lower().str.contains(termo)
+            df_exibir = df_exibir[mask]
+        if tipo_filtro:
+            df_exibir = df_exibir[df_exibir["route_type"].isin(tipo_filtro)]
+
+        colunas_uteis = [
+            c
+            for c in ["route_id", "route_short_name", "route_long_name", "route_type", "route_color"]
+            if c in df_exibir.columns
+        ]
+        st.dataframe(
+            df_exibir[colunas_uteis] if colunas_uteis else df_exibir,
+            use_container_width=True,
+        )
+        st.caption(f"{len(df_exibir)} linha(s) exibidas de {len(df_routes)} totais no GTFS.")
+    else:
+        st.info(
+            "Nenhum GTFS carregado ainda. Envie o arquivo `.zip` acima, ou salve-o em "
+            f"`{GTFS_LOCAL_PATH}` no repositório para carregamento automático."
+        )
 
 # ==================== PARADAS ====================
 with tab_paradas:
