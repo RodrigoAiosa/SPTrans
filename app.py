@@ -19,6 +19,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from sptrans_client import SPTransClient, SPTransAuthError, SPTransAPIError, CLIENT_VERSION
+from esconder_selo import esconder_selo_streamlit
 
 TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
 
@@ -42,6 +43,7 @@ st.set_page_config(
     page_icon="🚌",
     layout="wide",
 )
+esconder_selo_streamlit()  # oculta os controles do Streamlit Cloud
 
 # ------------------------------------------------------------------
 # Autenticação / Cliente (cacheado por sessão do Streamlit)
