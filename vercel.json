@@ -4,6 +4,11 @@
   "buildCommand": "",
   "installCommand": "",
   "functions": {
-    "api/olhovivo.js": { "maxDuration": 30 }
-  }
+    "api/olhovivo.js": {
+      "maxDuration": 30
+    }
+  },
+  "regions": [
+    "gru1"
+  ]
 }
