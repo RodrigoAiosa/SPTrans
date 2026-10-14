@@ -1,0 +1,9 @@
+# O app Streamlit (Python) não roda na Vercel; lá publicamos só o index.html,
+# a lista de linhas em data/gtfs/ e a função api/olhovivo.js.
+app.py
+sptrans_client.py
+esconder_selo.py
+design.css
+requirements.txt
+.streamlit/
+gtfs.zip

@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Olho Vivo Dashboard</title>
+<meta name="description" content="Ônibus de São Paulo em tempo real: linhas, paradas, corredores, empresas, posição da frota e previsão de chegada, com dados da API Olho Vivo da SPTrans.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚌</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* Linguagem visual de transporte público: concreto, tinta, azul-rota e
+   âmbar-parada reservado ao sinal ao vivo (mesma paleta do design.css). */
+:root {
+  --bg: #f1f2f4; --surface: #ffffff; --ink: #12182b; --ink-2: #515b6e; --ink-3: #7d8697;
+  --route: #1e5eff; --route-2: #133fb0; --stop: #ff8a34; --line: #d8dce3; --ok: #16a34a; --bad: #dc2626;
+  --display: "Space Grotesk", "Segoe UI", sans-serif; --body: "Inter", "Segoe UI", sans-serif; --mono: "IBM Plex Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f131c; --surface: #171d29; --ink: #eef1f6; --ink-2: #aab3c3; --ink-3: #7d8697; --route: #5b8cff; --route-2: #86a9ff; --line: #2a3242; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f131c; --surface: #171d29; --ink: #eef1f6; --ink-2: #aab3c3; --ink-3: #7d8697; --route: #5b8cff; --route-2: #86a9ff; --line: #2a3242; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.55 var(--body); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+
+header.top { padding: 34px 0 6px; display: flex; flex-wrap: wrap; gap: 16px; align-items: end; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.badge-route { font: 700 13px var(--mono); background: var(--route); color: #fff; border-radius: 6px; padding: 6px 9px; letter-spacing: .02em; }
+h1 { font: 700 clamp(28px, 4.5vw, 44px)/1 var(--display); margin: 0; letter-spacing: -.02em; }
+.sub { color: var(--ink-2); margin: 8px 0 0; max-width: 640px; }
+.live { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--mono); color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 6px 12px; }
+.live i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); }
+.live.on i { background: var(--stop); animation: pulse 1.6s infinite; }
+.live.off i { background: var(--bad); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,138,52,.6); } 70% { box-shadow: 0 0 0 9px rgba(255,138,52,0); } 100% { box-shadow: 0 0 0 0 rgba(255,138,52,0); } }
+
+.notice { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--stop); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: var(--ink-2); }
+.notice b { color: var(--ink); }
+.notice code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+
+nav.tabs { display: flex; gap: 2px; margin: 24px 0 18px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; }
+.tab { appearance: none; border: 0; background: none; color: var(--ink-2); font: 500 14px var(--body); padding: 10px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--route); font-weight: 600; }
+.tab:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--route); outline-offset: 2px; }
+
+section[hidden] { display: none; }
+h2 { font: 600 22px/1.2 var(--display); margin: 0 0 4px; }
+.cap { color: var(--ink-2); font-size: 14px; margin: 0 0 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 150px; flex: 1; }
+.field.sm { flex: 0 1 180px; }
+label.l { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+input[type=text], input[type=search], input[type=number], select { font: 400 14px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; }
+input[type=number] { font-family: var(--mono); }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--bg); margin-bottom: 14px; }
+.seg button { border: 0; background: none; padding: 8px 12px; font: 500 13px var(--body); color: var(--ink-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--route); color: #fff; }
+.btn { appearance: none; border: 0; border-radius: 8px; background: var(--route); color: #fff; font: 600 14px var(--body); padding: 0 16px; min-height: 40px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--route-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); min-height: 40px; }
+
+.out { margin-top: 16px; }
+.meta { font: 400 12px var(--mono); color: var(--ink-3); margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.table-wrap { overflow: auto; max-height: 520px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--bg); color: var(--ink-2); font-weight: 600; z-index: 1; }
+td.mono { font-family: var(--mono); }
+tr:hover td { background: color-mix(in srgb, var(--route) 5%, transparent); }
+.code { font: 500 12px var(--mono); padding: 2px 7px; border-radius: 5px; display: inline-block; }
+.link { background: none; border: 0; color: var(--route); cursor: pointer; font: 500 12px var(--body); padding: 0 4px; text-decoration: underline; text-underline-offset: 2px; }
+.yes { color: var(--ok); } .no { color: var(--ink-3); }
+.map { height: 460px; border-radius: 10px; border: 1px solid var(--line); margin-top: 12px; z-index: 0; }
+.empty { color: var(--ink-2); padding: 14px 0; }
+.error { color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); border-radius: 8px; padding: 10px 12px; }
+.loading { display: flex; gap: 10px; align-items: center; color: var(--ink-2); padding: 14px 0; }
+.spin { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--route); border-radius: 50%; animation: s .8s linear infinite; }
+@keyframes s { to { transform: rotate(360deg); } }
+.leaflet-popup-content { font: 13px/1.45 var(--body); }
+footer { color: var(--ink-3); font-size: 12px; padding: 40px 0 48px; }
+footer a { color: var(--ink-2); }
+@media (max-width: 640px) { .field.sm { flex: 1 1 100%; } .map { height: 380px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand"><span class="badge-route">SPTrans</span><h1>Olho Vivo Dashboard</h1></div>
+      <p class="sub">Ônibus de São Paulo em tempo real: linhas, paradas, corredores, empresas, posição da frota e previsão de chegada.</p>
+    </div>
+    <div class="live" id="live"><i></i><span id="liveTxt">Verificando conexão…</span></div>
+  </header>
+  <div class="notice" id="aviso" hidden></div>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-t="linhas" aria-selected="true">🔎 Linhas</button>
+    <button class="tab" role="tab" data-t="gtfs" aria-selected="false">📚 Todas as linhas (GTFS)</button>
+    <button class="tab" role="tab" data-t="paradas" aria-selected="false">📍 Paradas</button>
+    <button class="tab" role="tab" data-t="corredores" aria-selected="false">🛣️ Corredores</button>
+    <button class="tab" role="tab" data-t="empresas" aria-selected="false">🏢 Empresas</button>
+    <button class="tab" role="tab" data-t="posicao" aria-selected="false">🚍 Posição dos veículos</button>
+    <button class="tab" role="tab" data-t="previsao" aria-selected="false">⏱️ Previsão de chegada</button>
+    <button class="tab" role="tab" data-t="mapa" aria-selected="false">🗺️ Mapa geral</button>
+  </nav>
+
+  <!-- LINHAS -->
+  <section id="s-linhas" role="tabpanel">
+    <h2>Buscar linhas</h2>
+    <p class="cap">Aceita número ou nome da linha, total ou parcial. Ex.: 8000, Lapa, Ramos.</p>
+    <form class="card form" id="f-linhas">
+      <div class="field"><label class="l" for="linTermo">Termo de busca</label><input type="search" id="linTermo" placeholder="Ex.: 8000, Lapa, Ramos" required></div>
+      <div class="field sm"><label class="l" for="linSentido">Sentido</label>
+        <select id="linSentido"><option value="">Ambos</option><option value="1">1 · Principal → Secundário</option><option value="2">2 · Secundário → Principal</option></select></div>
+      <button class="btn">Buscar linhas</button>
+    </form>
+    <div class="out" id="o-linhas"></div>
+  </section>
+
+  <!-- GTFS -->
+  <section id="s-gtfs" role="tabpanel" hidden>
+    <h2>Todas as linhas do sistema (GTFS)</h2>
+    <p class="cap">A API Olho Vivo não lista todas as linhas de uma vez. Esta aba usa o cadastro do <b>GTFS estático</b> da SPTrans que está no repositório, então funciona mesmo sem o token da API.</p>
+    <div class="card form">
+      <div class="field"><label class="l" for="gtfsTermo">Filtrar por número ou nome</label><input type="search" id="gtfsTermo" placeholder="Ex.: 8000, Lapa"></div>
+      <div class="field sm"><label class="l" for="gtfsTipo">Tipo (route_type)</label><select id="gtfsTipo"><option value="">Todos</option></select></div>
+    </div>
+    <div class="out" id="o-gtfs"></div>
+  </section>
+
+  <!-- PARADAS -->
+  <section id="s-paradas" role="tabpanel" hidden>
+    <h2>Buscar paradas</h2>
+    <div class="seg" id="parModo"><button type="button" data-m="nome" aria-pressed="true">Por nome/endereço</button><button type="button" data-m="linha" aria-pressed="false">Por código de linha</button><button type="button" data-m="corredor" aria-pressed="false">Por corredor</button></div>
+    <form class="card form" id="f-paradas">
+      <div class="field" data-show="nome"><label class="l" for="parTermo">Nome da parada ou endereço</label><input type="search" id="parTermo" value="Afonso"></div>
+      <div class="field sm" data-show="linha" hidden><label class="l" for="parLinha">Código da linha (aba Linhas)</label><input type="number" id="parLinha" min="0"></div>
+      <div class="field" data-show="corredor" hidden><label class="l" for="parCorredor">Corredor</label><select id="parCorredor"><option value="">Carregando corredores…</option></select></div>
+      <button class="btn">Buscar paradas</button>
+    </form>
+    <div class="out" id="o-paradas"></div>
+  </section>
+
+  <!-- CORREDORES -->
+  <section id="s-corredores" role="tabpanel" hidden>
+    <h2>Corredores inteligentes</h2>
+    <p class="cap">Corredores de ônibus monitorados pela SPTrans.</p>
+    <button class="btn" id="btnCorredores">Listar corredores</button>
+    <div class="out" id="o-corredores"></div>
+  </section>
+
+  <!-- EMPRESAS -->
+  <section id="s-empresas" role="tabpanel" hidden>
+    <h2>Empresas operadoras</h2>
+    <p class="cap">Empresas que operam o sistema, por área de operação.</p>
+    <div class="form"><button class="btn" id="btnEmpresas">Listar empresas</button>
+      <div class="field sm"><label class="l" for="empArea">Área de operação</label><select id="empArea"><option value="">Todas</option></select></div></div>
+    <div class="out" id="o-empresas"></div>
+  </section>
+
+  <!-- POSIÇÃO -->
+  <section id="s-posicao" role="tabpanel" hidden>
+    <h2>Posição dos veículos em tempo real</h2>
+    <div class="seg" id="posModo"><button type="button" data-m="todos" aria-pressed="true">Todos os veículos</button><button type="button" data-m="linha" aria-pressed="false">Por linha</button><button type="button" data-m="garagem" aria-pressed="false">Por empresa/garagem</button></div>
+    <form class="card form" id="f-posicao">
+      <div class="field sm" data-show="linha" hidden><label class="l" for="posLinha">Código da linha</label><input type="number" id="posLinha" min="0"></div>
+      <div class="field" data-show="garagem" hidden><label class="l" for="posEmpresa">Empresa</label><select id="posEmpresa"><option value="">Carregando empresas…</option></select></div>
+      <div class="field sm" data-show="garagem" hidden><label class="l" for="posEmpLinha">Código da linha (opcional)</label><input type="number" id="posEmpLinha" min="0"></div>
+      <div class="field" data-show="todos"><label class="l" for="posFiltro">Letreiro contém</label><input type="search" id="posFiltro" placeholder="Ex.: 8000"></div>
+      <label class="chk"><input type="checkbox" id="posAcess"> Somente acessíveis</label>
+      <button class="btn">Consultar posições</button>
+    </form>
+    <div class="out" id="o-posicao"></div>
+  </section>
+
+  <!-- PREVISÃO -->
+  <section id="s-previsao" role="tabpanel" hidden>
+    <h2>Previsão de chegada</h2>
+    <div class="seg" id="prevModo"><button type="button" data-m="pl" aria-pressed="true">Parada + linha</button><button type="button" data-m="linha" aria-pressed="false">Por linha (todas as paradas)</button><button type="button" data-m="parada" aria-pressed="false">Por parada (todas as linhas)</button></div>
+    <form class="card form" id="f-previsao">
+      <div class="field sm" data-show="pl parada"><label class="l" for="prevParada">Código da parada</label><input type="number" id="prevParada" min="0"></div>
+      <div class="field sm" data-show="pl linha"><label class="l" for="prevLinha">Código da linha</label><input type="number" id="prevLinha" min="0"></div>
+      <button class="btn">Consultar previsão</button>
+    </form>
+    <div class="out" id="o-previsao"></div>
+  </section>
+
+  <!-- MAPA GERAL -->
+  <section id="s-mapa" role="tabpanel" hidden>
+    <h2>Mapa geral — frota em tempo real</h2>
+    <p class="cap">Posição de todos os ônibus em operação agora, com filtro por letreiro e acessibilidade.</p>
+    <div class="card form">
+      <div class="field"><label class="l" for="mapFiltro">Letreiro contém</label><input type="search" id="mapFiltro" placeholder="Ex.: 8000"></div>
+      <label class="chk"><input type="checkbox" id="mapAcess"> Somente acessíveis</label>
+      <label class="chk"><input type="checkbox" id="mapAuto"> Atualizar a cada 30 s</label>
+      <button class="btn" id="btnMapa">Carregar frota agora</button>
+    </div>
+    <div class="out" id="o-mapa"></div>
+  </section>
+
+  <footer>
+    Dados: <a href="https://www.sptrans.com.br/desenvolvedores/" target="_blank" rel="noopener">API Olho Vivo e GTFS da SPTrans</a>. Horários exibidos no fuso de Brasília.
+    · <a href="https://github.com/RodrigoAiosa/SPTrans" target="_blank" rel="noopener">Código no GitHub</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const fmtHora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const brasilia = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : fmtHora.format(d); };
+  const loading = (el, msg = "Consultando API…") => (el.innerHTML = `<div class="loading"><div class="spin"></div>${esc(msg)}</div>`);
+  const erroHtml = (e) => `<div class="error">❌ ${esc(e.message || e)}</div>`;
+
+  // ------------------------------------------------------------------ API
+  let tokenAusente = false;
+  async function api(op, params = {}) {
+    const qs = new URLSearchParams({ op, ...Object.fromEntries(Object.entries(params).filter(([, v]) => v !== "" && v != null)) });
+    let r;
+    try { r = await fetch(`/api/olhovivo?${qs}`); }
+    catch { throw new Error("Não foi possível falar com o servidor do painel."); }
+    if (r.status === 404) throw new Error("A API em tempo real só funciona no site publicado na Vercel.");
+    const txt = await r.text();
+    let d = null; try { d = txt ? JSON.parse(txt) : null; } catch { throw new Error("Resposta inesperada do servidor."); }
+    if (!r.ok) {
+      if (d && d.erro === "token_ausente") { tokenAusente = true; mostrarAviso(); throw new Error("O token da API Olho Vivo ainda não foi configurado na Vercel."); }
+      throw new Error((d && (d.mensagem || d.erro)) || `HTTP ${r.status}`);
+    }
+    return d;
+  }
+
+  function setLive(estado, txt) { const el = $("live"); el.className = `live ${estado}`; $("liveTxt").textContent = txt; }
+  function mostrarAviso() {
+    const a = $("aviso"); a.hidden = false;
+    a.innerHTML = `<b>Tempo real desativado: falta o token da SPTrans.</b> No projeto da Vercel, adicione a variável de ambiente <code>SPTRANS_TOKEN</code> com o seu token de “Meus Aplicativos” e faça um novo deploy. O token fica só no servidor, nunca no navegador. Enquanto isso, a aba <b>Todas as linhas (GTFS)</b> funciona normalmente.`;
+    setLive("off", "Tempo real indisponível");
+  }
+  async function verificarStatus() {
+    try { await api("status"); setLive("on", "Conectado à SPTrans"); }
+    catch (e) { if (!tokenAusente) setLive("off", e.message.length > 60 ? "Sem conexão com a SPTrans" : e.message); }
+  }
+
+  // --------------------------------------------------------- tabela genérica
+  function tabela(cols, linhas, opts = {}) {
+    if (!linhas.length) return `<div class="empty">${esc(opts.vazio || "Nenhum resultado.")}</div>`;
+    const max = opts.max || 2000;
+    const corpo = linhas.slice(0, max).map((l) => `<tr>${cols.map((c) => `<td class="${c.mono ? "mono" : ""}">${c.html ? c.html(l) : esc(c.v(l))}</td>`).join("")}</tr>`).join("");
+    return `<div class="table-wrap"><table><thead><tr>${cols.map((c) => `<th>${esc(c.t)}</th>`).join("")}</tr></thead><tbody>${corpo}</tbody></table></div>` +
+      (linhas.length > max ? `<p class="meta">Mostrando ${max.toLocaleString("pt-BR")} de ${linhas.length.toLocaleString("pt-BR")} linhas. Use os filtros para refinar.</p>` : "");
+  }
+  const simNao = (v) => (v ? `<span class="yes">♿ sim</span>` : `<span class="no">não</span>`);
+
+  // -------------------------------------------------------------- mapas
+  const mapas = {};
+  function mapa(id, pontos, cor = "#ff8a34") {
+    const el = document.getElementById(id); if (!el) return;
+    if (mapas[id]) { mapas[id].remove(); delete mapas[id]; }
+    const m = L.map(el, { preferCanvas: true, scrollWheelZoom: false }).setView([-23.55, -46.63], 11);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { subdomains: "abcd", maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' }).addTo(m);
+    const g = L.featureGroup();
+    pontos.filter((p) => isFinite(p.lat) && isFinite(p.lon) && p.lat).forEach((p) => {
+      L.circleMarker([p.lat, p.lon], { radius: p.r || 5, color: "#fff", weight: 1, fillColor: p.cor || cor, fillOpacity: .9 }).bindPopup(p.popup || "").addTo(g);
+    });
+    g.addTo(m);
+    if (g.getLayers().length) m.fitBounds(g.getBounds(), { padding: [20, 20], maxZoom: 15 });
+    mapas[id] = m;
+  }
+
+  // ----------------------------------------------------------------- abas
+  const abrir = (t) => {
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === t));
+    document.querySelectorAll("section[role=tabpanel]").forEach((s) => (s.hidden = s.id !== `s-${t}`));
+    Object.values(mapas).forEach((m) => setTimeout(() => m.invalidateSize(), 30));
+    if (t === "gtfs") carregarGtfs();
+    if (t === "paradas" || t === "posicao") carregarListas();
+    history.replaceState(null, "", `#${t}`);
+  };
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) abrir(b.dataset.t); });
+
+  function segmentado(id, onChange) {
+    const seg = $(id);
+    seg.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      onChange(b.dataset.m);
+    });
+    return () => seg.querySelector("[aria-pressed=true]").dataset.m;
+  }
+  function mostrarCampos(form, modo) {
+    form.querySelectorAll("[data-show]").forEach((el) => (el.hidden = !el.dataset.show.split(" ").includes(modo)));
+  }
+
+  // Atalhos: a partir de uma linha/parada, abrir outra aba já preenchida
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-acao]"); if (!b) return;
+    const { acao, cod } = b.dataset;
+    if (acao === "paradasLinha") { abrir("paradas"); $("parModo").querySelector('[data-m="linha"]').click(); $("parLinha").value = cod; $("f-paradas").requestSubmit(); }
+    if (acao === "posLinha") { abrir("posicao"); $("posModo").querySelector('[data-m="linha"]').click(); $("posLinha").value = cod; $("f-posicao").requestSubmit(); }
+    if (acao === "prevLinha") { abrir("previsao"); $("prevModo").querySelector('[data-m="linha"]').click(); $("prevLinha").value = cod; $("f-previsao").requestSubmit(); }
+    if (acao === "prevParada") { abrir("previsao"); $("prevModo").querySelector('[data-m="parada"]').click(); $("prevParada").value = cod; $("f-previsao").requestSubmit(); }
+    if (acao === "linhaApi") { abrir("linhas"); $("linTermo").value = cod; $("f-linhas").requestSubmit(); }
+    window.scrollTo({ top: $("tabs").offsetTop - 10, behavior: "smooth" });
+  });
+
+  // ================================================================ LINHAS
+  $("f-linhas").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const out = $("o-linhas"), termo = $("linTermo").value.trim(), sentido = $("linSentido").value;
+    if (!termo) { out.innerHTML = `<div class="empty">Este endpoint exige um termo de busca. Tente um número ou nome, ex.: 8000, Lapa.</div>`; return; }
+    loading(out);
+    try {
+      const d = (sentido ? await api("linhaSentido", { termosBusca: termo, sentido }) : await api("linhas", { termosBusca: termo })) || [];
+      out.innerHTML = `<p class="meta">${d.length} linha(s) encontrada(s)</p>` + tabela([
+        { t: "Código linha", v: (l) => l.cl, mono: 1 },
+        { t: "Letreiro", html: (l) => `<span class="code" style="background:var(--route);color:#fff">${esc(l.lt)}-${esc(l.tl)}</span>` },
+        { t: "Sentido", v: (l) => (l.sl === 1 ? "1 · Principal → Secundário" : "2 · Secundário → Principal") },
+        { t: "Circular", v: (l) => (l.lc ? "sim" : "não") },
+        { t: "Terminal principal", v: (l) => l.tp },
+        { t: "Terminal secundário", v: (l) => l.ts },
+        { t: "Ver", html: (l) => `<button class="link" data-acao="paradasLinha" data-cod="${l.cl}">paradas</button><button class="link" data-acao="posLinha" data-cod="${l.cl}">veículos</button><button class="link" data-acao="prevLinha" data-cod="${l.cl}">previsão</button>` },
+      ], d, { vazio: "Nenhuma linha encontrada para esse termo." });
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  });
+
+  // ================================================================== GTFS
+  let gtfs = null;
+  const TIPOS = { 0: "Bonde/VLT", 1: "Metrô", 2: "Trem", 3: "Ônibus" };
+  async function carregarGtfs() {
+    if (gtfs) return;
+    const out = $("o-gtfs"); loading(out, "Lendo GTFS…");
+    try {
+      gtfs = await fetch("data/gtfs/routes.json").then((r) => { if (!r.ok) throw new Error("Arquivo GTFS não encontrado."); return r.json(); });
+      [...new Set(gtfs.linhas.map((l) => l[3]))].sort().forEach((t) => $("gtfsTipo").add(new Option(`${t} · ${TIPOS[t] || "outro"}`, t)));
+      filtrarGtfs();
+    } catch (e) { gtfs = null; out.innerHTML = erroHtml(e); }
+  }
+  function filtrarGtfs() {
+    if (!gtfs) return;
+    const termo = $("gtfsTermo").value.trim().toLowerCase(), tipo = $("gtfsTipo").value;
+    const f = gtfs.linhas.filter((l) => (!tipo || l[3] === tipo) && (!termo || l[0].toLowerCase().includes(termo) || l[1].toLowerCase().includes(termo) || l[2].toLowerCase().includes(termo)));
+    const [a, m, d] = gtfs.atualizado || [];
+    $("o-gtfs").innerHTML = `<p class="meta"><span>${f.length.toLocaleString("pt-BR")} linha(s) exibidas de ${gtfs.linhas.length.toLocaleString("pt-BR")} no GTFS</span>${a ? `<span>arquivo de ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${a}</span>` : ""}</p>` + tabela([
+      { t: "Linha", html: (l) => `<span class="code" style="background:#${esc(l[4] || "1e5eff")};color:#${esc(l[5] || "ffffff")}">${esc(l[1])}</span>` },
+      { t: "Nome", v: (l) => l[2] },
+      { t: "Tipo", v: (l) => `${l[3]} · ${TIPOS[l[3]] || "outro"}` },
+      { t: "route_id", v: (l) => l[0], mono: 1 },
+      { t: "", html: (l) => `<button class="link" data-acao="linhaApi" data-cod="${esc(l[1].split("-")[0])}">buscar na API</button>` },
+    ], f, { vazio: "Nenhuma linha corresponde ao filtro.", max: 600 });
+  }
+  $("gtfsTermo").addEventListener("input", filtrarGtfs);
+  $("gtfsTipo").addEventListener("change", filtrarGtfs);
+
+  // ------------------------------------------------- listas de apoio (selects)
+  let corredores = null, empresas = null, listasCarregando = false;
+  async function carregarListas() {
+    if (listasCarregando || (corredores && empresas)) return;
+    listasCarregando = true;
+    try {
+      corredores = corredores || (await api("corredores")) || [];
+      $("parCorredor").innerHTML = corredores.map((c) => `<option value="${c.cc}">${esc(c.nc)} (cód. ${c.cc})</option>`).join("") || `<option value="">Nenhum corredor</option>`;
+    } catch { $("parCorredor").innerHTML = `<option value="">Não foi possível carregar</option>`; }
+    try {
+      empresas = empresas || (await api("empresas"));
+      const lista = achatarEmpresas(empresas);
+      $("posEmpresa").innerHTML = lista.map((e) => `<option value="${e.c}">${esc(e.n)} (cód. ${e.c})</option>`).join("") || `<option value="">Nenhuma empresa</option>`;
+    } catch { $("posEmpresa").innerHTML = `<option value="">Não foi possível carregar</option>`; }
+    listasCarregando = false;
+  }
+  function achatarEmpresas(d) {
+    const out = [];
+    ((d && d.e) || []).forEach((area) => (area && area.e ? area.e : []).forEach((e) => e && out.push({ area: area.a, c: e.c, n: e.n })));
+    return out;
+  }
+
+  // =============================================================== PARADAS
+  const modoParada = segmentado("parModo", (m) => mostrarCampos($("f-paradas"), m));
+  $("f-paradas").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const out = $("o-paradas"), m = modoParada();
+    loading(out);
+    try {
+      let d;
+      if (m === "nome") d = await api("paradas", { termosBusca: $("parTermo").value.trim() });
+      else if (m === "linha") { if (!$("parLinha").value) throw new Error("Informe o código da linha."); d = await api("paradasLinha", { codigoLinha: $("parLinha").value }); }
+      else { if (!$("parCorredor").value) throw new Error("Escolha um corredor."); d = await api("paradasCorredor", { codigoCorredor: $("parCorredor").value }); }
+      d = d || [];
+      out.innerHTML = `<p class="meta">${d.length} parada(s) encontrada(s)</p>` + tabela([
+        { t: "Código parada", v: (p) => p.cp, mono: 1 },
+        { t: "Nome", v: (p) => p.np },
+        { t: "Endereço", v: (p) => p.ed },
+        { t: "Lat", v: (p) => p.py, mono: 1 }, { t: "Lon", v: (p) => p.px, mono: 1 },
+        { t: "", html: (p) => `<button class="link" data-acao="prevParada" data-cod="${p.cp}">previsão</button>` },
+      ], d, { vazio: "Nenhuma parada encontrada." }) + (d.length ? `<div class="map" id="mapParadas"></div>` : "");
+      if (d.length) mapa("mapParadas", d.map((p) => ({ lat: p.py, lon: p.px, cor: "#1e5eff", popup: `<b>${esc(p.np)}</b><br>${esc(p.ed || "")}<br>Código ${p.cp}<br><button class="link" data-acao="prevParada" data-cod="${p.cp}">ver previsão</button>` })));
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  });
+
+  // ============================================================ CORREDORES
+  $("btnCorredores").addEventListener("click", async () => {
+    const out = $("o-corredores"); loading(out);
+    try {
+      corredores = (await api("corredores")) || [];
+      out.innerHTML = `<p class="meta">${corredores.length} corredor(es) cadastrados</p>` + tabela([{ t: "Código", v: (c) => c.cc, mono: 1 }, { t: "Nome", v: (c) => c.nc }], corredores, { vazio: "Nenhum corredor retornado." });
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  });
+
+  // ============================================================== EMPRESAS
+  async function mostrarEmpresas() {
+    const out = $("o-empresas"); loading(out);
+    try {
+      empresas = empresas || (await api("empresas"));
+      const lista = achatarEmpresas(empresas);
+      const areaSel = $("empArea");
+      if (areaSel.options.length === 1) [...new Set(lista.map((e) => e.area))].sort((a, b) => a - b).forEach((a) => areaSel.add(new Option(`Área ${a}`, a)));
+      const f = lista.filter((e) => !areaSel.value || String(e.area) === areaSel.value).sort((a, b) => String(a.n).localeCompare(String(b.n), "pt-BR"));
+      out.innerHTML = `<p class="meta"><span>${f.length} empresa(s)</span>${empresas && empresas.hr ? `<span>horário de referência ${esc(empresas.hr)}</span>` : ""}</p>` +
+        tabela([{ t: "Nome", v: (e) => e.n }, { t: "Código", v: (e) => e.c, mono: 1 }, { t: "Área", v: (e) => e.area, mono: 1 }], f, { vazio: "Nenhuma empresa retornada." });
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  }
+  $("btnEmpresas").addEventListener("click", mostrarEmpresas);
+  $("empArea").addEventListener("change", () => { if (empresas) mostrarEmpresas(); });
+
+  // ============================================================== POSIÇÃO
+  function achatarPosicao(d) {
+    const out = [];
+    ((d && d.l) || []).forEach((l) => (l.vs || []).forEach((v) => out.push({ letreiro: l.c, cl: l.cl, sl: l.sl, destino: l.lt0, origem: l.lt1, p: v.p, a: v.a, ta: v.ta, lat: v.py, lon: v.px })));
+    return out;
+  }
+  const colsVeiculos = [
+    { t: "Letreiro", html: (v) => `<span class="code" style="background:var(--route);color:#fff">${esc(v.letreiro)}</span>` },
+    { t: "Código linha", v: (v) => v.cl, mono: 1 },
+    { t: "Destino", v: (v) => v.destino }, { t: "Origem", v: (v) => v.origem },
+    { t: "Prefixo", v: (v) => v.p, mono: 1 }, { t: "Acessível", html: (v) => simNao(v.a) },
+    { t: "Captura (Brasília)", v: (v) => brasilia(v.ta), mono: 1 },
+  ];
+  const popupVeiculo = (v) => `<b>${esc(v.letreiro || "")}</b> · prefixo ${esc(v.p)}<br>${v.destino ? `Destino: ${esc(v.destino)}<br>` : ""}${v.a ? "♿ acessível<br>" : ""}<span style="color:#888">${esc(brasilia(v.ta))}</span>`;
+
+  const modoPos = segmentado("posModo", (m) => mostrarCampos($("f-posicao"), m));
+  $("f-posicao").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const out = $("o-posicao"), m = modoPos();
+    loading(out);
+    try {
+      let lista, hr;
+      if (m === "linha") {
+        if (!$("posLinha").value) throw new Error("Informe o código da linha.");
+        const d = await api("posicaoLinha", { codigoLinha: $("posLinha").value });
+        hr = d && d.hr; lista = ((d && d.vs) || []).map((v) => ({ letreiro: "", cl: $("posLinha").value, p: v.p, a: v.a, ta: v.ta, lat: v.py, lon: v.px }));
+      } else if (m === "garagem") {
+        if (!$("posEmpresa").value) throw new Error("Escolha uma empresa.");
+        const d = await api("posicaoGaragem", { codigoEmpresa: $("posEmpresa").value, codigoLinha: $("posEmpLinha").value });
+        hr = d && d.hr; lista = achatarPosicao(d);
+      } else {
+        const d = await api("posicao"); hr = d && d.hr; lista = achatarPosicao(d);
+        const f = $("posFiltro").value.trim().toLowerCase();
+        if (f) lista = lista.filter((v) => String(v.letreiro || "").toLowerCase().includes(f));
+      }
+      if ($("posAcess").checked) lista = lista.filter((v) => v.a);
+      out.innerHTML = `<p class="meta"><span>${lista.length.toLocaleString("pt-BR")} veículo(s)</span>${hr ? `<span>horário de referência ${esc(hr)}</span>` : ""}</p>` +
+        (lista.length ? `<div class="map" id="mapPosicao"></div><div style="margin-top:12px"></div>` : "") +
+        tabela(colsVeiculos, lista, { vazio: "Nenhum veículo encontrado no momento.", max: 1500 });
+      if (lista.length) mapa("mapPosicao", lista.map((v) => ({ lat: v.lat, lon: v.lon, r: 4, popup: popupVeiculo(v) })));
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  });
+
+  // ============================================================= PREVISÃO
+  const modoPrev = segmentado("prevModo", (m) => mostrarCampos($("f-previsao"), m));
+  $("f-previsao").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const out = $("o-previsao"), m = modoPrev(), parada = $("prevParada").value, linha = $("prevLinha").value;
+    loading(out);
+    try {
+      if (m === "linha") {
+        if (!linha) throw new Error("Informe o código da linha.");
+        const d = await api("previsaoLinha", { codigoLinha: linha });
+        const ps = (d && d.ps) || [], regs = [];
+        ps.forEach((p) => (p.vs || []).forEach((v) => regs.push({ parada: p.np, cp: p.cp, p: v.p, t: v.t, a: v.a })));
+        out.innerHTML = `<p class="meta"><span>${ps.length} parada(s)</span>${d && d.hr ? `<span>horário de referência ${esc(d.hr)}</span>` : ""}</p>
+          <div class="form" style="margin-bottom:10px"><div class="field"><label class="l" for="prevFiltro">Filtrar parada por nome</label><input type="search" id="prevFiltro"></div></div><div id="prevTab"></div>`;
+        const cols = [{ t: "Parada", v: (r) => r.parada }, { t: "Código parada", v: (r) => r.cp, mono: 1 }, { t: "Prefixo", v: (r) => r.p, mono: 1 }, { t: "Previsão", v: (r) => r.t, mono: 1 }, { t: "Acessível", html: (r) => simNao(r.a) }];
+        const draw = () => { const f = $("prevFiltro").value.trim().toLowerCase(); $("prevTab").innerHTML = tabela(cols, regs.filter((r) => !f || String(r.parada).toLowerCase().includes(f)), { vazio: "Nenhuma previsão disponível para essa linha no momento." }); };
+        $("prevFiltro").addEventListener("input", draw); draw();
+        return;
+      }
+      if (!parada || (m === "pl" && !linha)) throw new Error(m === "pl" ? "Informe o código da parada e da linha." : "Informe o código da parada.");
+      const d = m === "pl" ? await api("previsao", { codigoParada: parada, codigoLinha: linha }) : await api("previsaoParada", { codigoParada: parada });
+      const p = d && d.p;
+      if (!p) { out.innerHTML = `<div class="empty">Nenhum dado retornado — verifique os códigos informados.</div>`; return; }
+      const regs = [];
+      (p.l || []).forEach((l) => (l.vs || []).forEach((v) => regs.push({ letreiro: l.c, cl: l.cl, destino: l.lt0, origem: l.lt1, p: v.p, t: v.t, a: v.a })));
+      const letreiros = [...new Set(regs.map((r) => r.letreiro))].sort();
+      out.innerHTML = `<h2 style="font-size:18px;margin:4px 0 6px">📍 ${esc(p.np)}</h2><p class="meta">${d.hr ? `<span>horário de referência ${esc(d.hr)}</span>` : ""}<span>${regs.length} ônibus a caminho</span></p>` +
+        (letreiros.length > 1 ? `<div class="seg" id="prevLetreiros">${letreiros.map((l) => `<button type="button" aria-pressed="true" data-l="${esc(l)}">${esc(l)}</button>`).join("")}</div>` : "") + `<div id="prevTab"></div>`;
+      const cols = [{ t: "Letreiro", html: (r) => `<span class="code" style="background:var(--route);color:#fff">${esc(r.letreiro)}</span>` }, { t: "Destino", v: (r) => r.destino }, { t: "Prefixo", v: (r) => r.p, mono: 1 }, { t: "Previsão de chegada", v: (r) => r.t, mono: 1 }, { t: "Acessível", html: (r) => simNao(r.a) }];
+      const draw = () => {
+        const on = new Set([...document.querySelectorAll("#prevLetreiros [aria-pressed=true]")].map((b) => b.dataset.l));
+        const f = letreiros.length > 1 ? regs.filter((r) => on.has(r.letreiro)) : regs;
+        $("prevTab").innerHTML = tabela(cols, f.sort((a, b) => String(a.t).localeCompare(String(b.t))), { vazio: "Nenhuma previsão disponível no momento." });
+      };
+      const seg = $("prevLetreiros");
+      if (seg) seg.addEventListener("click", (ev) => { const b = ev.target.closest("button"); if (b) { b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); draw(); } });
+      draw();
+    } catch (err) { out.innerHTML = erroHtml(err); }
+  });
+
+  // =========================================================== MAPA GERAL
+  let frota = null, timer = null;
+  async function carregarFrota() {
+    const out = $("o-mapa");
+    if (!frota) loading(out, "Carregando a frota inteira…");
+    try { const d = await api("posicao"); frota = { hr: d && d.hr, lista: achatarPosicao(d) }; desenharFrota(); }
+    catch (err) { out.innerHTML = erroHtml(err); pararAuto(); }
+  }
+  function desenharFrota() {
+    if (!frota) return;
+    const f = $("mapFiltro").value.trim().toLowerCase();
+    let l = frota.lista;
+    if (f) l = l.filter((v) => String(v.letreiro || "").toLowerCase().includes(f));
+    if ($("mapAcess").checked) l = l.filter((v) => v.a);
+    const out = $("o-mapa");
+    if (!$("mapGeral")) out.innerHTML = `<p class="meta" id="mapMeta"></p><div class="map" id="mapGeral" style="height:560px"></div>`;
+    $("mapMeta").innerHTML = `<span>${l.length.toLocaleString("pt-BR")} veículo(s) exibidos</span>${frota.hr ? `<span>horário de referência ${esc(frota.hr)}</span>` : ""}${timer ? "<span>⟳ atualização automática ligada</span>" : ""}`;
+    const centro = mapas.mapGeral && mapas.mapGeral.getCenter(), zoom = mapas.mapGeral && mapas.mapGeral.getZoom();
+    mapa("mapGeral", l.map((v) => ({ lat: v.lat, lon: v.lon, r: 3.5, popup: popupVeiculo(v) })));
+    if (centro && !f) mapas.mapGeral.setView(centro, zoom);
+  }
+  function pararAuto() { clearInterval(timer); timer = null; $("mapAuto").checked = false; }
+  $("btnMapa").addEventListener("click", carregarFrota);
+  $("mapFiltro").addEventListener("input", desenharFrota);
+  $("mapAcess").addEventListener("change", desenharFrota);
+  $("mapAuto").addEventListener("change", () => {
+    if ($("mapAuto").checked) { timer = setInterval(carregarFrota, 30000); carregarFrota(); } else pararAuto();
+  });
+
+  // ----------------------------------------------------------------- início
+  const inicial = location.hash.slice(1);
+  abrir(document.querySelector(`.tab[data-t="${inicial}"]`) ? inicial : "linhas");
+  verificarStatus();
+})();
+</script>
+</body>
+</html>
